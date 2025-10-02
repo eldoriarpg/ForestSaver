@@ -1,4 +1,4 @@
-package de.eldoria.forestsaver.data.data;
+package de.eldoria.forestsaver.data.dao;
 
 import de.chojo.sadu.mapper.annotation.MappingProvider;
 import de.chojo.sadu.mapper.rowmapper.RowMapping;
@@ -30,14 +30,13 @@ public final class Node {
     }
 
     public void addBlocks(List<BlockState> blocks) {
-        query("INSERT INTO fragments (node_id, world, x, y, z, material, block_data) VALUES (:id, :world, :x, :y, :z, :material, :block_data)")
+        query("INSERT INTO fragments (node_id, world, x, y, z, block_data) VALUES (:id, :world::uuid, :x, :y, :z, :block_data) ON CONFLICT(world, x, y, z) DO NOTHING")
                 .batch(blocks.stream()
                              .map(block -> call().bind("id", id)
-                                                 .bind("world", block.getWorld().getUID(), StandardValueConverter.UUID_BYTES)
+                                                 .bind("world", block.getWorld().getUID(), StandardValueConverter.UUID_STRING)
                                                  .bind("x", block.getX())
                                                  .bind("y", block.getY())
                                                  .bind("z", block.getZ())
-                                                 .bind("material", block.getType())
                                                  .bind("block_data", block.getBlockData().getAsString())))
                 .insert();
         if (fragments != null) {
@@ -49,7 +48,7 @@ public final class Node {
     public static RowMapping<Node> map() {
         return row -> new Node(
                 row.getLong("id"),
-                row.get("world", StandardValueConverter.UUID_BYTES));
+                row.get("world", StandardValueConverter.UUID_STRING));
     }
 
     public long id() {
@@ -70,8 +69,18 @@ public final class Node {
         return fragments;
     }
 
+    public List<Fragment> destroyedFragments() {
+        return query("SELECT * FROM fragments WHERE node_id = :id AND destroyed IS NOT NULL")
+                .single(call().bind("id", id))
+                .mapAs(Fragment.class)
+                .all();
+    }
+
+
     public void breakBlock(@NotNull Block block) {
-        query("UPDATE fragments SET destroyed = now() WHERE node_id = :id AND x = :x AND y = :y AND z = :z")
+        query("""
+                UPDATE fragments SET destroyed = now() WHERE node_id = :id AND x = :x AND y = :y AND z = :z;
+                UPDATE nodes SET last_modified = now() WHERE id = :id;""")
                 .single(call().bind("id", id).bind("x", block.getX()).bind("y", block.getY()).bind("z", block.getZ()))
                 .update();
     }
