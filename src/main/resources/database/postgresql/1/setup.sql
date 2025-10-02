@@ -12,26 +12,30 @@ CREATE TABLE forest_schema.fragments (
     x          INTEGER NOT NULL,
     y          INTEGER NOT NULL,
     z          INTEGER NOT NULL,
-    material   TEXT    NOT NULL,
     block_data TEXT    NOT NULL,
     destroyed  TIMESTAMP,
     CONSTRAINT fragments_pk
         PRIMARY KEY (world, y, z, x)
 );
 
-CREATE FUNCTION forest_schema.update_nodes_last_modified(
+CREATE OR REPLACE FUNCTION forest_schema.update_nodes_last_modified(
 ) RETURNS TRIGGER
     LANGUAGE plpgsql
 AS
 $$
 BEGIN
-    UPDATE nodes SET last_modified = now() WHERE id = new.node_id;
+    UPDATE forest_schema.nodes SET last_modified = now() WHERE id = old.node_id;
+    RETURN new;
 END;
 $$;
 
-CREATE TRIGGER update_last_modified
-    AFTER UPDATE OR INSERT
+CREATE OR REPLACE TRIGGER update_last_modified
+    AFTER UPDATE OF destroyed OR INSERT
     ON forest_schema.fragments
-    WHEN ( new.destroyed IS NOT NULL AND old.destroyed IS NULL )
 EXECUTE PROCEDURE forest_schema.update_nodes_last_modified();
+
+ALTER TABLE forest_schema.fragments
+    ADD CONSTRAINT fragments_nodes_id_fk
+        FOREIGN KEY (node_id) REFERENCES forest_schema.nodes
+            ON DELETE CASCADE;
 
