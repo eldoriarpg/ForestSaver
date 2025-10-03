@@ -40,7 +40,6 @@ public class Node {
             nodes.all(world).forEach(node -> restoreService.restoreNode(node, full));
         } else {
             nodes.all(world).forEach(node -> restoreService.restoreNode(node, full));
-
         }
     }
 

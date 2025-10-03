@@ -76,7 +76,10 @@ public class ModificationService implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (buildAllowed.contains(event.getPlayer().getUniqueId())) return;
+        if (buildAllowed.contains(event.getPlayer().getUniqueId())) {
+            // TOdO: delete fragments if exist
+            return;
+        }
         BlockState block = event.getBlock().getState();
         Optional<String> presetName = getFlagValue(block);
 
@@ -149,7 +152,7 @@ public class ModificationService implements Listener {
      * Handles destruction of the given block.
      * Creates a new node if necessary and logs the block.
      *
-     * @param block block that was destroyed
+     * @param block  block that was destroyed
      * @param preset preset to use for node creation
      */
     private void handleBlockDestruction(BlockState block, Preset preset) {
@@ -217,7 +220,7 @@ public class ModificationService implements Listener {
      * The method stops adding blocks once the maximum allowed size is reached or if a block exceeds
      * the maximum allowable distance from the starting block.
      *
-     * @param block the starting block for the flood-fill operation
+     * @param block  the starting block for the flood-fill operation
      * @param preset the preset containing materials and rules for determining which blocks to include
      * @return a list of {@link BlockState} objects that were included in the flood-fill
      */

@@ -12,6 +12,7 @@ import de.chojo.sadu.sqlite.databases.SqLite;
 import de.chojo.sadu.updater.QueryReplacement;
 import de.chojo.sadu.updater.SqlUpdater;
 import de.eldoria.eldoutilities.plugin.EldoPlugin;
+import de.eldoria.forestsaver.commands.Debug;
 import de.eldoria.forestsaver.commands.Node;
 import de.eldoria.forestsaver.commands.Settings;
 import de.eldoria.forestsaver.commands.suggestions.Presets;
@@ -85,6 +86,7 @@ public class ForestSaverPlugin extends EldoPlugin {
         var annotationParser = new AnnotationParser<>(commandManager, CommandSourceStack.class);
         Node node = new Node(nodes, restoreService, modificationService);
         annotationParser.parse(node);
+        annotationParser.parse(new Debug());
         annotationParser.parse(new Presets(conf));
         annotationParser.parse(new Settings(conf));
         setupDb();
