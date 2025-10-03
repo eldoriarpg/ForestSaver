@@ -3,6 +3,7 @@ package de.eldoria.forestsaver;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.flags.registry.FlagRegistry;
 import de.chojo.sadu.datasource.DataSourceCreator;
+import de.chojo.sadu.mapper.RowMapperRegistry;
 import de.chojo.sadu.mariadb.databases.MariaDb;
 import de.chojo.sadu.mysql.databases.MySql;
 import de.chojo.sadu.postgresql.databases.PostgreSql;
@@ -19,6 +20,7 @@ import de.eldoria.forestsaver.configuration.elements.Database;
 import de.eldoria.forestsaver.configuration.parsing.module.InternalModule;
 import de.eldoria.forestsaver.data.Nodes;
 import de.eldoria.forestsaver.data.Worlds;
+import de.eldoria.forestsaver.data.dao.Fragment;
 import de.eldoria.forestsaver.service.modification.ModificationService;
 import de.eldoria.forestsaver.service.restoration.RestoreService;
 import de.eldoria.forestsaver.worldguard.ForestFlag;
@@ -141,7 +143,12 @@ public class ForestSaverPlugin extends EldoPlugin {
             throw new RuntimeException(e);
         }
 
-        QueryConfiguration.setDefault(QueryConfiguration.builder(dataSource).build());
+        RowMapperRegistry rowMapperRegistry = new RowMapperRegistry();
+        rowMapperRegistry.register(de.eldoria.forestsaver.data.dao.Node.class);
+        rowMapperRegistry.register(Fragment.class);
+        QueryConfiguration.setDefault(QueryConfiguration.builder(dataSource)
+                                                        .setRowMapperRegistry(rowMapperRegistry)
+                                                        .build());
     }
 
     private void updateDb(DataSource dataSource, Database database) throws SQLException, IOException {

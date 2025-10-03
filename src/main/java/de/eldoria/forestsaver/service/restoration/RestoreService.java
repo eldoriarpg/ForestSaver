@@ -49,24 +49,25 @@ public class RestoreService {
             RestoreJob job = jobs.poll();
             jobs.add(job);
             Fragment next = job.next();
-            if (next == null) continue;
-            boolean nearbyPlayer = job.world().getNearbyEntitiesByType(Player.class, next.position().toLocation(job.world()), configuration.main().restore().minPlayerDistance()).isEmpty();
+            if (next == null) {
+                job.finish();
+                jobs.remove(job);
+                continue;
+            }
+            boolean nearbyPlayer = !job.world().getNearbyEntitiesByType(Player.class, next.position().toLocation(job.world()), configuration.main().restore().minPlayerDistance()).isEmpty();
             if (nearbyPlayer) continue;
-            if (next.position().toLocation(job.world()).isChunkLoaded()) {
+            if (!next.position().toLocation(job.world()).isChunkLoaded()) {
                 job.world().getChunkAtAsync(next.position().toLocation(job.world()))
                    .thenAccept(chunk -> next.restore(chunk.getWorld()));
                 continue;
             }
             next.restore(job.world());
-            if (job.isDone()) {
-                job.finish();
-                jobs.remove(job);
-            }
         }
     }
 
     /**
      * Checks whether the given block is currently being restored.
+     *
      * @param block block to check
      * @return true if the block is currently being restored, false otherwise
      */
@@ -81,6 +82,7 @@ public class RestoreService {
 
     /**
      * Restores the given node.
+     *
      * @param node node to restore
      * @param full whether to restore all fragments or only the destroyed fragments
      */

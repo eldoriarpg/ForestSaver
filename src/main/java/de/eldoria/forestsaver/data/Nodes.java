@@ -146,7 +146,6 @@ public class Nodes {
                             bool_and(destroyed IS NULL) AS clear
                         FROM
                             fragments f
-                        WHERE f.world = :uid::UUID
                         GROUP BY node_id
                                       ),
                     filtered_nodes AS (
@@ -159,7 +158,7 @@ public class Nodes {
                         WHERE clear
                           AND n.last_modified < now() - ( :seconds || ' seconds' )::INTERVAL
                                       )
-                DELETE FROM nodes WHERE id IN (filtered_nodes)
+                DELETE FROM nodes WHERE id IN (SELECT node_id FROM filtered_nodes)
                 """)
                 .single(call().bind("seconds", configurations.main().restore().nodeDeletionTime()))
                 .delete();
