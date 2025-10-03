@@ -3,6 +3,7 @@ package de.eldoria.forestsaver.data.dao;
 import de.chojo.sadu.mapper.annotation.MappingProvider;
 import de.chojo.sadu.mapper.rowmapper.RowMapping;
 import de.chojo.sadu.queries.converter.StandardValueConverter;
+import de.eldoria.forestsaver.configuration.elements.Preset;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.jetbrains.annotations.NotNull;
@@ -23,21 +24,16 @@ public final class Node {
         this.world = world;
     }
 
-    public void addBlock(Block block) {
-        if (fragments != null) {
-            fragments.add(Fragment.fromBlock(id, block));
-        }
-    }
-
-    public void addBlocks(List<BlockState> blocks) {
-        query("INSERT INTO fragments (node_id, world, x, y, z, block_data) VALUES (:id, :world::uuid, :x, :y, :z, :block_data) ON CONFLICT(world, x, y, z) DO NOTHING")
+    public void addBlocks(List<BlockState> blocks, Preset preset) {
+        query("INSERT INTO fragments (node_id, world, x, y, z, block_data, always_restore) VALUES (:id, :world::UUID, :x, :y, :z, :block_data, :always_restore) ON CONFLICT(world, x, y, z) DO NOTHING")
                 .batch(blocks.stream()
                              .map(block -> call().bind("id", id)
                                                  .bind("world", block.getWorld().getUID(), StandardValueConverter.UUID_STRING)
                                                  .bind("x", block.getX())
                                                  .bind("y", block.getY())
                                                  .bind("z", block.getZ())
-                                                 .bind("block_data", block.getBlockData().getAsString())))
+                                                 .bind("block_data", block.getBlockData().getAsString())
+                                                 .bind("always_restore", preset.alwaysRestore(block.getType()))))
                 .insert();
         if (fragments != null) {
             fragments = null;
@@ -61,7 +57,7 @@ public final class Node {
 
     public List<Fragment> fragments() {
         if (fragments == null) {
-            fragments = query("SELECT * FROM fragments WHERE node_id = :id")
+            fragments = query("SELECT node_id, world, x, y, z, block_data, always_restore, destroyed FROM fragments WHERE node_id = :id")
                     .single(call().bind("id", id))
                     .mapAs(Fragment.class)
                     .all();
@@ -70,12 +66,11 @@ public final class Node {
     }
 
     public List<Fragment> destroyedFragments() {
-        return query("SELECT * FROM fragments WHERE node_id = :id AND destroyed IS NOT NULL")
+        return query("SELECT node_id, world, x, y, z, block_data, always_restore, destroyed FROM fragments WHERE node_id = :id AND (destroyed IS NOT NULL OR always_restore)")
                 .single(call().bind("id", id))
                 .mapAs(Fragment.class)
                 .all();
     }
-
 
     public void breakBlock(@NotNull Block block) {
         query("""

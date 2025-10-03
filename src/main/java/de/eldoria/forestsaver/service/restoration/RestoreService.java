@@ -1,42 +1,67 @@
 package de.eldoria.forestsaver.service.restoration;
 
 import de.eldoria.forestsaver.configuration.Configuration;
+import de.eldoria.forestsaver.data.Nodes;
 import de.eldoria.forestsaver.data.dao.Fragment;
 import de.eldoria.forestsaver.data.dao.Node;
 import dev.chojo.ocular.Configurations;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 
 public class RestoreService {
     private final Plugin plugin;
-    private final List<RestoreJob> jobs = new ArrayList<>();
+    private final Nodes nodes;
+    private final Queue<RestoreJob> jobs = new LinkedList<>();
     private final Configurations<Configuration> configuration;
+    private float tickProgress = 0;
 
-    public RestoreService(Plugin plugin, Configurations<Configuration> configuration) {
+    public RestoreService(Plugin plugin, Nodes nodes, Configurations<Configuration> configuration) {
         this.plugin = plugin;
+        this.nodes = nodes;
         this.configuration = configuration;
-        // TODO: configuration
-        plugin.getServer().getScheduler().runTaskTimer(plugin, this::processRestore, 0, configuration.main().restore().ticksPerBlock());
-        // TODO: configuration
-        plugin.getServer().getScheduler().runTaskTimer(plugin, this::restoreCheck, 0, configuration.main().restore().checks());
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::processRestore, 0, 1);
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::restoreCheck, 0, configuration.main().restore().checks());
     }
 
     private void restoreCheck() {
-
+        for (World world : plugin.getServer().getWorlds()) {
+            List<Node> idleNodes = nodes.idleNodes(world);
+            for (Node node : idleNodes) {
+                restoreNode(node, false);
+            }
+        }
     }
 
     public void processRestore() {
-        for (RestoreJob job : jobs) {
+        float jobSize = (float) jobs.size() / configuration.main().restore().ticksPerBlock();
+        tickProgress += jobSize;
+        long start = System.currentTimeMillis();
+        while (tickProgress > 1 && !jobs.isEmpty() && System.currentTimeMillis() - start < 5) {
+            tickProgress--;
+            RestoreJob job = jobs.poll();
+            jobs.add(job);
             Fragment next = job.next();
-            if (next == null) return;
+            if (next == null) continue;
+            boolean nearbyPlayer = job.world().getNearbyEntitiesByType(Player.class, next.position().toLocation(job.world()), configuration.main().restore().minPlayerDistance()).isEmpty();
+            if (nearbyPlayer) continue;
+            if (next.position().toLocation(job.world()).isChunkLoaded()) {
+                job.world().getChunkAtAsync(next.position().toLocation(job.world()))
+                        .thenAccept(chunk -> next.restore(chunk.getWorld()));
+                continue;
+            }
             next.restore(job.world());
+            if (job.isDone()) {
+                job.finish();
+                jobs.remove(job);
+            }
         }
-        jobs.removeIf(RestoreJob::isDone);
     }
 
     public boolean isRestored(Block block) {
@@ -48,22 +73,23 @@ public class RestoreService {
         return false;
     }
 
-    // TODO: off main thread
     public void restoreNode(Node node, boolean full) {
-        List<Fragment> fragments;
-        if (full) {
-            fragments = node.fragments();
-        } else {
-            fragments = node.destroyedFragments();
-        }
-        World world = plugin.getServer().getWorld(node.world());
-        if (world == null) return;
-        LinkedList<Fragment> restoreOrder = new LinkedList<>(fragments);
-        configuration.main().restore().restoreOrder().sort(restoreOrder);
-        addJob(new RestoreJob(world, node, restoreOrder));
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<Fragment> fragments;
+            if (full) {
+                fragments = node.fragments();
+            } else {
+                fragments = node.destroyedFragments();
+            }
+            World world = plugin.getServer().getWorld(node.world());
+            if (world == null) return;
+            LinkedList<Fragment> restoreOrder = new LinkedList<>(fragments);
+            configuration.main().restore().restoreOrder().sort(restoreOrder);
+            addJob(new RestoreJob(world, node, restoreOrder));
+        });
     }
 
-    public void addJob(RestoreJob job) {
+    private synchronized void addJob(RestoreJob job) {
         if (jobs.stream().anyMatch(j -> j.node().id() == job.node().id())) return;
         jobs.add(job);
     }

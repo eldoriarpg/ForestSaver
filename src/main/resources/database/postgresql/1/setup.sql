@@ -3,7 +3,8 @@ CREATE TABLE forest_schema.nodes (
         CONSTRAINT nodes_pk
             PRIMARY KEY,
     world         UUID                    NOT NULL,
-    last_modified TIMESTAMP DEFAULT now() NOT NULL
+    last_modified TIMESTAMP DEFAULT now() NOT NULL,
+    preset        TEXT                    NOT NULL
 );
 
 CREATE TABLE forest_schema.fragments (
@@ -12,11 +13,16 @@ CREATE TABLE forest_schema.fragments (
     x          INTEGER NOT NULL,
     y          INTEGER NOT NULL,
     z          INTEGER NOT NULL,
+    material   TEXT    NOT NULL,
     block_data TEXT    NOT NULL,
     destroyed  TIMESTAMP,
     CONSTRAINT fragments_pk
         PRIMARY KEY (world, y, z, x)
 );
+
+DROP INDEX IF EXISTS forest_schema.fragments_world_node_id_idx;
+CREATE INDEX fragments_world_node_id_idx
+    ON forest_schema.fragments (world) INCLUDE (node_id, destroyed) WHERE destroyed IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION forest_schema.update_nodes_last_modified(
 ) RETURNS TRIGGER
