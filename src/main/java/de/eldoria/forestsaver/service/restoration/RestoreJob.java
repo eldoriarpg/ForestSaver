@@ -3,9 +3,11 @@ package de.eldoria.forestsaver.service.restoration;
 import de.eldoria.forestsaver.data.dao.Fragment;
 import de.eldoria.forestsaver.data.dao.Node;
 import org.bukkit.World;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.util.BlockVector;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
@@ -16,11 +18,20 @@ public final class RestoreJob {
     private final Node node;
     private final Queue<Fragment> fragments;
     private final Set<BlockVector> restoration;
+    private final List<Fragment> once;
 
     public RestoreJob(World world, Node node, Queue<Fragment> fragments) {
         this.world = world;
         this.node = node;
+        this.once = fragments.stream().filter(e -> {
+            BlockData blockData = e.blockData();
+            return !blockData.getMaterial().hasGravity() && !blockData.getMaterial().isSolid();
+        }).toList();
         this.fragments = fragments;
+        this.fragments.removeIf(e -> {
+            BlockData blockData = e.blockData();
+            return !blockData.getMaterial().hasGravity() && !blockData.getMaterial().isSolid();
+        });
         restoration = fragments.stream().map(Fragment::position).collect(Collectors.toSet());
     }
 
@@ -55,13 +66,12 @@ public final class RestoreJob {
         if (obj == null || obj.getClass() != this.getClass()) return false;
         var that = (RestoreJob) obj;
         return Objects.equals(this.world, that.world) &&
-               Objects.equals(this.node, that.node) &&
-               Objects.equals(this.fragments, that.fragments);
+               Objects.equals(this.node, that.node);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(world, node, fragments);
+        return Objects.hash(world, node);
     }
 
     @Override
@@ -72,4 +82,9 @@ public final class RestoreJob {
                "fragments=" + fragments + ']';
     }
 
+    public void finish() {
+        for (Fragment fragment : once) {
+            fragment.restore(world);
+        }
+    }
 }

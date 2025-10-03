@@ -11,7 +11,9 @@ import de.chojo.sadu.sqlite.databases.SqLite;
 import de.chojo.sadu.updater.QueryReplacement;
 import de.chojo.sadu.updater.SqlUpdater;
 import de.eldoria.eldoutilities.plugin.EldoPlugin;
-import de.eldoria.forestsaver.commands.Restore;
+import de.eldoria.forestsaver.commands.Node;
+import de.eldoria.forestsaver.commands.Settings;
+import de.eldoria.forestsaver.commands.suggestions.Presets;
 import de.eldoria.forestsaver.configuration.Configuration;
 import de.eldoria.forestsaver.configuration.elements.Database;
 import de.eldoria.forestsaver.configuration.parsing.module.InternalModule;
@@ -28,6 +30,7 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.incendo.cloud.annotations.AnnotationParser;
 import org.incendo.cloud.execution.ExecutionCoordinator;
 import org.incendo.cloud.paper.PaperCommandManager;
+import org.incendo.cloud.parser.ParserRegistry;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -69,17 +72,25 @@ public class ForestSaverPlugin extends EldoPlugin {
                                                 .executionCoordinator(ExecutionCoordinator.<CommandSourceStack>builder().build())
                                                 .buildOnEnable(this);
 
-        Nodes nodes = new Nodes();
+        Nodes nodes = new Nodes(conf);
         Worlds worlds = new Worlds(nodes);
-        RestoreService restoreService = new RestoreService(this, conf);
+        RestoreService restoreService = new RestoreService(this,nodes, conf);
         ModificationService modificationService = new ModificationService(this, worlds, WorldGuard.getInstance(), forestFlag, restoreService, conf);
         registerListener(modificationService);
 
         // Parser without a CommandMeta mapper.
         var annotationParser = new AnnotationParser<>(commandManager, CommandSourceStack.class);
-        Restore restore = new Restore(nodes, restoreService);
-        annotationParser.parse(restore);
+        Node node = new Node(nodes, restoreService, modificationService);
+        annotationParser.parse(node);
+        annotationParser.parse(new Presets(conf));
+        annotationParser.parse(new Settings(conf));
         setupDb();
+    }
+
+    @Override
+    public void onPostStart() throws Throwable {
+        conf.main().bootstrap(this, conf);
+        conf.save();
     }
 
     private void setupDb() {

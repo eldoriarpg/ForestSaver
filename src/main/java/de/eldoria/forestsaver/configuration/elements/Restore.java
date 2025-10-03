@@ -7,6 +7,7 @@ public class Restore {
     int ticksPerBlock = 5;
     int checkForRestore = 20 * 60;
     int nodeIdleTime = 20 * 60 * 10;
+    int nodeDeletionTime = 20 * 60 * 10;
     int minPlayerDistance = 10;
 
     public RestoreOrder restoreOrder() {
@@ -21,11 +22,19 @@ public class Restore {
         return checkForRestore;
     }
 
-    public int restoreAfterTicks() {
+    public int nodeIdleTime() {
         return nodeIdleTime;
     }
 
     public int minPlayerDistance() {
         return minPlayerDistance;
+    }
+
+    public int checkForRestore() {
+        return checkForRestore;
+    }
+
+    public int nodeDeletionTime() {
+        return nodeDeletionTime;
     }
 }
