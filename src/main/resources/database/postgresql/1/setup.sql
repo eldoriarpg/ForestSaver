@@ -14,30 +14,14 @@ CREATE TABLE forest_schema.fragments (
     z              INTEGER NOT NULL,
     block_data     TEXT    NOT NULL,
     destroyed      TIMESTAMP,
-    always_restore BOOLEAN
-        CONSTRAINT fragments_pk
-            PRIMARY KEY (world, y, z, x)
+    always_restore BOOLEAN,
+    CONSTRAINT fragments_pk
+        PRIMARY KEY (world, y, z, x)
 );
 
 DROP INDEX IF EXISTS forest_schema.fragments_world_node_id_idx;
 CREATE INDEX fragments_world_node_id_idx
     ON forest_schema.fragments (world) INCLUDE (node_id, destroyed) WHERE destroyed IS NOT NULL;
-
-CREATE OR REPLACE FUNCTION forest_schema.update_nodes_last_modified(
-) RETURNS TRIGGER
-    LANGUAGE plpgsql
-AS
-$$
-BEGIN
-    UPDATE forest_schema.nodes SET last_modified = now() WHERE id = old.node_id;
-    RETURN new;
-END;
-$$;
-
-CREATE OR REPLACE TRIGGER update_last_modified
-    AFTER UPDATE OF destroyed OR INSERT
-    ON forest_schema.fragments
-EXECUTE PROCEDURE forest_schema.update_nodes_last_modified();
 
 ALTER TABLE forest_schema.fragments
     ADD CONSTRAINT fragments_nodes_id_fk
