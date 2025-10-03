@@ -27,7 +27,7 @@ dependencies {
     compileOnly(libs.worldguard)
     implementation(libs.ocular)
     implementation(libs.jackson.yaml)
-    implementation("de.eldoria.jacksonbukkit", "paper", "1.2.0")
+    implementation("de.eldoria.jacksonbukkit", "paper", "1.3.0")
 
     paperLibrary("org.incendo:cloud-annotations:2.0.0")
     annotationProcessor("org.incendo:cloud-annotations:2.0.0")

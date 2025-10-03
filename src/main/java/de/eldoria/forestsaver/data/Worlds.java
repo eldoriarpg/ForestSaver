@@ -14,6 +14,12 @@ public class Worlds {
         this.nodes = nodes;
     }
 
+    /**
+     * Returns the world with the given UUID.
+     *
+     * @param uuid UUID of the world to get
+     * @return world with the given UUID
+     */
     public World getWorld(UUID uuid) {
         return worlds.computeIfAbsent(uuid, (k) -> new World(nodes, uuid));
     }

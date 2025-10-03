@@ -1,6 +1,6 @@
 package de.eldoria.forestsaver.service.modification;
 
-import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 
-record Distance(Block block, int distance) {
+record Distance(BlockState block, int distance) {
 }

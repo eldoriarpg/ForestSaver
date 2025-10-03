@@ -55,6 +55,10 @@ public final class Node {
         return world;
     }
 
+    /**
+     * Returns all fragments of this node.
+     * @return fragments
+     */
     public List<Fragment> fragments() {
         if (fragments == null) {
             fragments = query("SELECT node_id, world, x, y, z, block_data, always_restore, destroyed FROM fragments WHERE node_id = :id")
@@ -65,6 +69,10 @@ public final class Node {
         return fragments;
     }
 
+    /**
+     * Returns all fragments of this node that have been destroyed or are always restored.
+     * @return fragments
+     */
     public List<Fragment> destroyedFragments() {
         return query("SELECT node_id, world, x, y, z, block_data, always_restore, destroyed FROM fragments WHERE node_id = :id AND (destroyed IS NOT NULL OR always_restore)")
                 .single(call().bind("id", id))
@@ -72,7 +80,11 @@ public final class Node {
                 .all();
     }
 
-    public void breakBlock(@NotNull Block block) {
+    /**
+     * Marks the given block as destroyed.
+     * @param block block to mark as destroyed
+     */
+    public void breakBlock(@NotNull BlockState block) {
         query("""
                 UPDATE fragments SET destroyed = now() WHERE node_id = :id AND x = :x AND y = :y AND z = :z;
                 UPDATE nodes SET last_modified = now() WHERE id = :id;""")

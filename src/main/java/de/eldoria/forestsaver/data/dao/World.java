@@ -15,6 +15,11 @@ public class World {
         this.worldUid = worldUid;
     }
 
+    /**
+     * Returns the node at the given location.
+     * @param location location to get the node for
+     * @return node at the given location, or empty if no node exists at the given location
+     */
     public Optional<Node> getNode(Location location) {
         if (worldUid != location.getWorld().getUID()) {
             throw new IllegalArgumentException("Worlds don't match");
@@ -22,6 +27,10 @@ public class World {
         return nodes.getNode(location);
     }
 
+    /**
+     * Creates a new node in this world.
+     * @return new node
+     */
     public Node createNode() {
         return nodes.createNode(worldUid);
     }

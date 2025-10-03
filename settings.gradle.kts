@@ -67,7 +67,6 @@ dependencyResolutionManagement {
 
             library("ocular", "dev.chojo", "ocular").version("1.0.2")
 
-
             library("worldguard", "com.sk89q.worldguard", "worldguard-bukkit").version("7.0.14")
 
             plugin("publishdata", "de.chojo.publishdata").version("1.4.0")
