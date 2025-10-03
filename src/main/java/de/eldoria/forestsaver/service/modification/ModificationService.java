@@ -15,7 +15,6 @@ import de.eldoria.forestsaver.worldguard.ForestFlag;
 import dev.chojo.ocular.Configurations;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -57,20 +56,28 @@ public class ModificationService implements Listener {
         this.configuration = configuration;
     }
 
+    /**
+     * Allows the given player to build.
+     *
+     * @param uuid player to allow to build
+     */
     public void allowBuild(UUID uuid) {
         buildAllowed.add(uuid);
     }
 
+    /**
+     * Disallows the given player to build.
+     *
+     * @param uuid player to disallow to build
+     */
     public void disallowBuild(UUID uuid) {
         buildAllowed.remove(uuid);
     }
 
-    // TODO: what about stripping wood
-
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockBreak(BlockBreakEvent event) {
         if (buildAllowed.contains(event.getPlayer().getUniqueId())) return;
-        Block block = event.getBlock();
+        BlockState block = event.getBlock().getState();
         Optional<String> presetName = getFlagValue(block);
 
         if (presetName.isEmpty()) return;
@@ -92,20 +99,10 @@ public class ModificationService implements Listener {
         handleBlockDestruction(block, preset.get());
     }
 
-    private void registerNewNode(World world, Block block, Preset preset) {
-        Node node = world.createNode();
-
-        List<BlockState> blocks = floodFill(block, preset);
-
-        // TODO: Off main thread theoretically
-        node.addBlocks(blocks, preset);
-        node.breakBlock(block);
-    }
-
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockPlace(BlockPlaceEvent event) {
         if (buildAllowed.contains(event.getPlayer().getUniqueId())) return;
-        Optional<String> flagValue = getFlagValue(event.getBlock());
+        Optional<String> flagValue = getFlagValue(event.getBlock().getState());
         if (flagValue.isPresent()) {
             event.setCancelled(true);
             return;
@@ -114,7 +111,7 @@ public class ModificationService implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onLeaveDecay(LeavesDecayEvent event) {
-        Block block = event.getBlock();
+        BlockState block = event.getBlock().getState();
         Optional<String> presetName = getFlagValue(block);
         if (presetName.isEmpty()) return;
 
@@ -126,7 +123,9 @@ public class ModificationService implements Listener {
 
         Optional<Node> optNode = world.getNode(block.getLocation());
         if (optNode.isPresent()) {
-            optNode.get().breakBlock(block);
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                optNode.get().breakBlock(block);
+            });
             return;
         }
 
@@ -141,25 +140,49 @@ public class ModificationService implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockPhysics(BlockPhysicsEvent event) {
-        if (restoreService.isRestored(event.getBlock())) {
+        if (restoreService.isRestored(event.getBlock().getState())) {
             event.setCancelled(true);
-            return;
         }
     }
 
-    private void handleBlockDestruction(Block block, Preset preset) {
-        World world = worlds.getWorld(block.getWorld().getUID());
+    /**
+     * Handles destruction of the given block.
+     * Creates a new node if necessary and logs the block.
+     *
+     * @param block block that was destroyed
+     * @param preset preset to use for node creation
+     */
+    private void handleBlockDestruction(BlockState block, Preset preset) {
+        // TODO: ugly af, maybe rework with some non existing threading framework
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            World world = worlds.getWorld(block.getWorld().getUID());
+            Optional<Node> optNode = world.getNode(block.getLocation());
+            if (optNode.isPresent()) {
+                optNode.get().breakBlock(block);
+                return;
+            }
 
-        Optional<Node> optNode = world.getNode(block.getLocation());
-        if (optNode.isPresent()) {
-            optNode.get().breakBlock(block);
-            return;
-        }
+            Node node = world.createNode();
 
-        registerNewNode(world, block, preset);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                List<BlockState> blocks = floodFill(block, preset);
+
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    node.addBlocks(blocks, preset);
+                    node.breakBlock(block);
+                });
+            });
+        });
     }
 
-    private ApplicableRegionSet getRegionsAtBlock(Block block) {
+    /**
+     * Retrieves the set of regions applicable to the provided block.
+     * The regions are determined using WorldGuard.
+     *
+     * @param block the block for which to retrieve applicable regions
+     * @return the set of regions applicable to the given block
+     */
+    private ApplicableRegionSet getRegionsAtBlock(BlockState block) {
         ApplicableRegionSet applicableRegions = worldGuard.getPlatform().getRegionContainer()
                                                           .get(BukkitAdapter.adapt(block.getWorld()))
                                                           .getApplicableRegions(BukkitAdapter.asBlockVector(block.getLocation()), RegionQuery.QueryOption.COMPUTE_PARENTS);
@@ -168,7 +191,14 @@ public class ModificationService implements Listener {
         return applicableRegions;
     }
 
-    private Optional<String> getFlagValue(Block block) {
+    /**
+     * Retrieves the value of a specific flag for a given block.
+     * If no flag value is explicitly set for the block, it falls back to a preset specified for the world.
+     *
+     * @param block the block for which the flag value is being queried
+     * @return an Optional containing the flag value if defined, otherwise an empty Optional
+     */
+    private Optional<String> getFlagValue(BlockState block) {
         ApplicableRegionSet regionSet = getRegionsAtBlock(block);
         String queryValue = regionSet.queryValue(null, flag);
         if (queryValue == null) {
@@ -181,7 +211,17 @@ public class ModificationService implements Listener {
         return value;
     }
 
-    private List<BlockState> floodFill(Block block, Preset preset) {
+    /**
+     * Performs a flood-fill operation starting from the given block and including neighboring blocks
+     * based on specific criteria such as distance, preset material types, and configuration limits.
+     * The method stops adding blocks once the maximum allowed size is reached or if a block exceeds
+     * the maximum allowable distance from the starting block.
+     *
+     * @param block the starting block for the flood-fill operation
+     * @param preset the preset containing materials and rules for determining which blocks to include
+     * @return a list of {@link BlockState} objects that were included in the flood-fill
+     */
+    private List<BlockState> floodFill(BlockState block, Preset preset) {
         Queue<Distance> queue = new LinkedList<>();
         Set<BlockVector> visited = new HashSet<>();
         List<BlockState> blocks = new ArrayList<>();
@@ -193,7 +233,7 @@ public class ModificationService implements Listener {
             Distance curBlock = queue.poll();
             if (curBlock.distance() > maxDistance) continue;
 
-            blocks.add(curBlock.block().getState());
+            blocks.add(curBlock.block());
             visited.add(curBlock.block().getLocation().toVector().toBlockVector());
 
             for (int x = -1; x < 2; x++) {
@@ -202,7 +242,7 @@ public class ModificationService implements Listener {
                         if (x == 0 && y == 0 && z == 0) continue;
                         Location loc = curBlock.block().getLocation().clone().add(new Vector(x, y, z));
                         if (visited.contains(loc.toVector().toBlockVector())) continue;
-                        Block nextBlock = loc.getBlock();
+                        BlockState nextBlock = loc.getBlock().getState();
                         if (preset.contains(nextBlock.getType())) {
                             visited.add(nextBlock.getLocation().toVector().toBlockVector());
                             Optional<String> flagValue = getFlagValue(nextBlock);

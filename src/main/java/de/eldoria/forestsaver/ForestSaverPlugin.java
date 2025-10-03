@@ -23,6 +23,7 @@ import de.eldoria.forestsaver.service.modification.ModificationService;
 import de.eldoria.forestsaver.service.restoration.RestoreService;
 import de.eldoria.forestsaver.worldguard.ForestFlag;
 import de.eldoria.jacksonbukkit.JacksonPaper;
+import de.eldoria.jacksonbukkit.serializer.NamespacedKeySerializer;
 import dev.chojo.ocular.Configurations;
 import dev.chojo.ocular.dataformats.YamlDataFormat;
 import dev.chojo.ocular.key.Key;
@@ -30,7 +31,6 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.incendo.cloud.annotations.AnnotationParser;
 import org.incendo.cloud.execution.ExecutionCoordinator;
 import org.incendo.cloud.paper.PaperCommandManager;
-import org.incendo.cloud.parser.ParserRegistry;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -55,6 +55,7 @@ public class ForestSaverPlugin extends EldoPlugin {
                              .setBase(getDataPath().resolve("configurations"))
                              .addModule(JacksonPaper.builder()
                                                     .withMiniMessages()
+                                                    .withNamespacedKeyFormat(NamespacedKeySerializer.Format.SHORT)
                                                     .build())
                              .addModule(new InternalModule())
                              .build();
@@ -74,7 +75,7 @@ public class ForestSaverPlugin extends EldoPlugin {
 
         Nodes nodes = new Nodes(conf);
         Worlds worlds = new Worlds(nodes);
-        RestoreService restoreService = new RestoreService(this,nodes, conf);
+        RestoreService restoreService = new RestoreService(this, nodes, conf);
         ModificationService modificationService = new ModificationService(this, worlds, WorldGuard.getInstance(), forestFlag, restoreService, conf);
         registerListener(modificationService);
 

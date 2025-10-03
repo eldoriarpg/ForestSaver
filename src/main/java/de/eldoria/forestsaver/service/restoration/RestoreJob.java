@@ -35,15 +35,31 @@ public final class RestoreJob {
         restoration = fragments.stream().map(Fragment::position).collect(Collectors.toSet());
     }
 
+    /**
+     * Checks if the given position is contained in the restoration.
+     *
+     * @param position position to check
+     * @return true if the position is contained in the restoration, false otherwise
+     */
     public boolean contains(BlockVector position) {
         return restoration.contains(position);
     }
 
+    /**
+     * Returns the next fragment to restore.
+     *
+     * @return next fragment to restore, or null if there are no more fragments to restore
+     */
     @Nullable
     public Fragment next() {
         return fragments.poll();
     }
 
+    /**
+     * Checks if the job is done.
+     *
+     * @return true if the job is done, false otherwise
+     */
     public boolean isDone() {
         return fragments.isEmpty();
     }
@@ -56,6 +72,11 @@ public final class RestoreJob {
         return node;
     }
 
+    /**
+     * Returns the fragments of this job.
+     *
+     * @return fragments
+     */
     public Queue<Fragment> fragments() {
         return fragments;
     }
@@ -82,6 +103,10 @@ public final class RestoreJob {
                "fragments=" + fragments + ']';
     }
 
+
+    /**
+     * Restores all once fragments.
+     */
     public void finish() {
         for (Fragment fragment : once) {
             fragment.restore(world);

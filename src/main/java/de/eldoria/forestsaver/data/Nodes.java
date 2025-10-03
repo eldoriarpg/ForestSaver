@@ -22,6 +22,12 @@ public class Nodes {
         this.configurations = configurations;
     }
 
+    /**
+     * Returns the node at the given location.
+     *
+     * @param location location to get the node for
+     * @return node at the given location, or empty if no node exists at the given location
+     */
     public Optional<Node> getNode(Location location) {
         return query("""
                 SELECT
@@ -45,6 +51,12 @@ public class Nodes {
                 .first();
     }
 
+    /**
+     * Returns the node with the given id.
+     *
+     * @param id id of the node to get
+     * @return node with the given id, or empty if no node exists with the given id
+     */
     public Optional<Node> getNode(long id) {
         return query("SELECT id, last_modified, world FROM nodes WHERE id = :id")
                 .single(call().bind("id", id))
@@ -52,6 +64,12 @@ public class Nodes {
                 .first();
     }
 
+    /**
+     * Creates a new node in the given world.
+     *
+     * @param worldUid uid of the world to create the node in
+     * @return new node
+     */
     public Node createNode(UUID worldUid) {
         return query("INSERT INTO nodes (world) VALUES (:uid::UUID) RETURNING id")
                 .single(call().bind("uid", worldUid, StandardValueConverter.UUID_STRING))
@@ -60,6 +78,12 @@ public class Nodes {
                 .orElseThrow(() -> new RuntimeException("Could not create node"));
     }
 
+    /**
+     * Returns all nodes of the given world.
+     *
+     * @param world world to get the nodes for
+     * @return list of nodes
+     */
     public List<Node> all(World world) {
         return query("SELECT id, last_modified, world FROM nodes WHERE world = :id::UUID")
                 .single(call().bind("id", world.getUID(), StandardValueConverter.UUID_STRING))
@@ -67,6 +91,12 @@ public class Nodes {
                 .all();
     }
 
+    /**
+     * Returns all idle nodes of the given world.
+     *
+     * @param world world to get the nodes for
+     * @return list of idle nodes
+     */
     public List<Node> idleNodes(World world) {
         return query("""
                 WITH
@@ -93,12 +123,20 @@ public class Nodes {
                 .all();
     }
 
+    /**
+     * Deletes the given node.
+     *
+     * @param node node to delete
+     */
     public void deleteNode(Node node) {
         query("DELETE FROM nodes WHERE id = :id")
                 .single(call().bind("id", node.id()))
                 .update();
     }
 
+    /**
+     * Deletes all unused nodes.
+     */
     public void deleteUnusedNodes() {
         query("""
                 WITH

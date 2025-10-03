@@ -16,15 +16,26 @@ public class Worlds {
     Map<UUID, String> defaultPresets = new HashMap<>();
     String defaultPreset = null;
 
-
-    public void setDefaultPreset(World worldUid, @Nullable Preset preset) {
+    /**
+     * Sets the default preset for the given world.
+     *
+     * @param world  world to set the default preset for
+     * @param preset preset to set as default preset, or null to remove the preset
+     */
+    public void setDefaultPreset(World world, @Nullable Preset preset) {
         if (preset == null) {
-            defaultPresets.put(worldUid.getUID(), null);
+            defaultPresets.put(world.getUID(), null);
         } else {
-            defaultPresets.put(worldUid.getUID(), preset.name());
+            defaultPresets.put(world.getUID(), preset.name());
         }
     }
 
+    /**
+     * Returns the preset for the given world.
+     *
+     * @param world world to get the preset for
+     * @return Optional of preset name, or empty optional if no preset is set
+     */
     public Optional<String> presetFor(World world) {
         return Optional.ofNullable(defaultPresets.computeIfAbsent(world.getUID(), k -> null)).or(() -> Optional.ofNullable(defaultPreset));
     }
@@ -53,6 +64,8 @@ public class Worlds {
                 defaultPresets.remove(uuid);
             }
         }
-        plugin.getServer().getWorlds().forEach(world -> {defaultPresets.putIfAbsent(world.getUID(), null);});
+        plugin.getServer().getWorlds().forEach(world -> {
+            defaultPresets.putIfAbsent(world.getUID(), null);
+        });
     }
 }

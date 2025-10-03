@@ -6,11 +6,10 @@ import de.eldoria.forestsaver.data.dao.Fragment;
 import de.eldoria.forestsaver.data.dao.Node;
 import dev.chojo.ocular.Configurations;
 import org.bukkit.World;
-import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -27,7 +26,7 @@ public class RestoreService {
         this.nodes = nodes;
         this.configuration = configuration;
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::processRestore, 0, 1);
-        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::restoreCheck, 0, configuration.main().restore().checks());
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::restoreCheck, 0, configuration.main().restore().checkForRestore());
     }
 
     private void restoreCheck() {
@@ -37,9 +36,11 @@ public class RestoreService {
                 restoreNode(node, false);
             }
         }
+
+        nodes.deleteUnusedNodes();
     }
 
-    public void processRestore() {
+    private void processRestore() {
         float jobSize = (float) jobs.size() / configuration.main().restore().ticksPerBlock();
         tickProgress += jobSize;
         long start = System.currentTimeMillis();
@@ -53,7 +54,7 @@ public class RestoreService {
             if (nearbyPlayer) continue;
             if (next.position().toLocation(job.world()).isChunkLoaded()) {
                 job.world().getChunkAtAsync(next.position().toLocation(job.world()))
-                        .thenAccept(chunk -> next.restore(chunk.getWorld()));
+                   .thenAccept(chunk -> next.restore(chunk.getWorld()));
                 continue;
             }
             next.restore(job.world());
@@ -64,7 +65,12 @@ public class RestoreService {
         }
     }
 
-    public boolean isRestored(Block block) {
+    /**
+     * Checks whether the given block is currently being restored.
+     * @param block block to check
+     * @return true if the block is currently being restored, false otherwise
+     */
+    public boolean isRestored(BlockState block) {
         for (RestoreJob job : jobs) {
             if (job.contains(block.getLocation().toVector().toBlockVector())) {
                 return true;
@@ -73,6 +79,11 @@ public class RestoreService {
         return false;
     }
 
+    /**
+     * Restores the given node.
+     * @param node node to restore
+     * @param full whether to restore all fragments or only the destroyed fragments
+     */
     public void restoreNode(Node node, boolean full) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             List<Fragment> fragments;

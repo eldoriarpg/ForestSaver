@@ -27,6 +27,12 @@ public class Database {
         return port;
     }
 
+    /**
+     * Name of the database.
+     * Applicable when using {@link DatabaseType#POSTGRESQL}, {@link DatabaseType#MYSQL} or {@link DatabaseType#MARIADB}.
+     *
+     * @return database
+     */
     public String database() {
         return database;
     }
@@ -39,18 +45,43 @@ public class Database {
         return password;
     }
 
+    /**
+     * Path to the database file.
+     * Applicable when using {@link DatabaseType#SQLITE}.
+     *
+     * @return path
+     */
     public String path() {
         return path;
     }
+
+    /**
+     * Schema for all tables in the database.
+     * Applicable when using {@link DatabaseType#POSTGRESQL}.
+     *
+     * @return schema
+     */
 
     public String schema() {
         return schema;
     }
 
+    /**
+     * Table prefix for all tables in the database.
+     * Applicable when using {@link DatabaseType#MYSQL} or {@link DatabaseType#MARIADB}.
+     *
+     * @return tablePrefix
+     */
     public String tablePrefix() {
         return tablePrefix;
     }
 
+    /**
+     * The size of the connection pool.
+     * Applicable when using {@link DatabaseType#POSTGRESQL} {@link DatabaseType#MYSQL}, {@link DatabaseType#MARIADB}.
+     *
+     * @return poolSize
+     */
     public int poolSize() {
         return poolSize;
     }
