@@ -10,17 +10,12 @@ import org.bukkit.plugin.Plugin;
 
 public class Configuration {
     Database database = new Database();
-    Presets presets = new Presets();
     Restore restore = new Restore();
     Nodes nodes = new Nodes();
     Worlds worlds = new Worlds();
 
     public Database database() {
         return database;
-    }
-
-    public Presets presets() {
-        return presets;
     }
 
     public Restore restore() {

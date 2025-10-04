@@ -97,14 +97,21 @@ public class Nodes {
      * @param world world to get the nodes for
      * @return list of idle nodes
      */
-    public List<Node> idleNodes(World world) {
+    public List<Node> idleNodes(UUID world) {
         return query("""
                 WITH
-                    destroyed AS (
-                        SELECT DISTINCT node_id
+                    idle_nodes AS (
+                        SELECT DISTINCT node_id, max(destroyed + (token || ' minutes')::INTERVAL) AS restore_time
                         FROM fragments
-                        WHERE destroyed IS NOT NULL AND world = :uid::UUID
-                        AND destroyed < now() - (:seconds || ' seconds')::INTERVAL
+                        WHERE world = :uid::UUID
+                            AND token IS NOT NULL
+                            AND node_id IS NOT NULL
+                        GROUP BY node_id
+                    ),
+                    filtered_nodes AS (
+                        SELECT node_id
+                        FROM idle_nodes
+                        WHERE restore_time < now()
                     )
                 SELECT
                     id,
@@ -114,11 +121,10 @@ public class Nodes {
                     nodes
                 WHERE id IN (
                     SELECT node_id
-                    FROM destroyed
+                    FROM filtered_nodes
                             )
                 """)
-                .single(call().bind("uid", world.getUID(), StandardValueConverter.UUID_STRING)
-                              .bind("seconds", configurations.main().restore().nodeIdleTime()))
+                .single(call().bind("uid", world, StandardValueConverter.UUID_STRING))
                 .mapAs(Node.class)
                 .all();
     }

@@ -1,9 +1,12 @@
 package de.eldoria.forestsaver.service.restoration;
 
 import de.eldoria.forestsaver.configuration.Configuration;
+import de.eldoria.forestsaver.configuration.elements.ResourceType;
 import de.eldoria.forestsaver.data.Nodes;
+import de.eldoria.forestsaver.data.Worlds;
 import de.eldoria.forestsaver.data.dao.Fragment;
 import de.eldoria.forestsaver.data.dao.Node;
+import de.eldoria.forestsaver.data.dao.NodeFragment;
 import dev.chojo.ocular.Configurations;
 import org.bukkit.World;
 import org.bukkit.block.BlockState;
@@ -17,13 +20,15 @@ import java.util.Queue;
 public class RestoreService {
     private final Plugin plugin;
     private final Nodes nodes;
+    private final Worlds worlds;
     private final Queue<RestoreJob> jobs = new LinkedList<>();
     private final Configurations<Configuration> configuration;
     private float tickProgress = 0;
 
-    public RestoreService(Plugin plugin, Nodes nodes, Configurations<Configuration> configuration) {
+    public RestoreService(Plugin plugin, Nodes nodes, Worlds worlds, Configurations<Configuration> configuration) {
         this.plugin = plugin;
         this.nodes = nodes;
+        this.worlds = worlds;
         this.configuration = configuration;
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::processRestore, 0, 1);
         plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::restoreCheck, 0, configuration.main().restore().checkForRestore());
@@ -31,9 +36,14 @@ public class RestoreService {
 
     private void restoreCheck() {
         for (World world : plugin.getServer().getWorlds()) {
-            List<Node> idleNodes = nodes.idleNodes(world);
+            var resourceWorld = this.worlds.getWorld(world.getUID());
+            List<Node> idleNodes = resourceWorld.idleNodes();
             for (Node node : idleNodes) {
                 restoreNode(node, false);
+            }
+            for (ResourceType type : List.of(ResourceType.GROWING, ResourceType.FRAGMENT)) {
+                List<Fragment> fragments = resourceWorld.idleFragments(type);
+                addJob(new RestoreJob(world, null, new LinkedList<>(fragments)));
             }
         }
 
@@ -88,7 +98,7 @@ public class RestoreService {
      */
     public void restoreNode(Node node, boolean full) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<Fragment> fragments;
+            List<NodeFragment> fragments;
             if (full) {
                 fragments = node.fragments();
             } else {

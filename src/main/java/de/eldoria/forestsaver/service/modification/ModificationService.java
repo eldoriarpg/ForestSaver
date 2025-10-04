@@ -5,24 +5,30 @@ import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionQuery;
+import de.eldoria.eldoutilities.container.Pair;
 import de.eldoria.forestsaver.configuration.Configuration;
 import de.eldoria.forestsaver.configuration.elements.Preset;
-import de.eldoria.forestsaver.data.Worlds;
+import de.eldoria.forestsaver.configuration.elements.Presets;
+import de.eldoria.forestsaver.configuration.elements.ResourceType;
 import de.eldoria.forestsaver.data.dao.Node;
 import de.eldoria.forestsaver.data.dao.World;
 import de.eldoria.forestsaver.service.restoration.RestoreService;
-import de.eldoria.forestsaver.worldguard.ForestFlag;
+import de.eldoria.forestsaver.worldguard.ResourceFlag;
 import dev.chojo.ocular.Configurations;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.BlockVector;
 import org.bukkit.util.Vector;
@@ -39,19 +45,19 @@ import java.util.stream.Collectors;
 
 public class ModificationService implements Listener {
     private final WorldGuard worldGuard;
-    private final ForestFlag flag;
+    private final List<ResourceFlag> resourceFlags;
     private final RestoreService restoreService;
     private final Configurations<Configuration> configuration;
     private final Set<UUID> buildAllowed = new HashSet<>();
 
     private final Plugin plugin;
-    private final Worlds worlds;
+    private final de.eldoria.forestsaver.data.Worlds worlds;
 
-    public ModificationService(Plugin plugin, Worlds worlds, WorldGuard worldGuard, ForestFlag flag, RestoreService restoreService, Configurations<Configuration> configuration) {
+    public ModificationService(Plugin plugin, de.eldoria.forestsaver.data.Worlds worlds, WorldGuard worldGuard, List<ResourceFlag> resourceFlags, RestoreService restoreService, Configurations<Configuration> configuration) {
         this.plugin = plugin;
         this.worlds = worlds;
         this.worldGuard = worldGuard;
-        this.flag = flag;
+        this.resourceFlags = resourceFlags;
         this.restoreService = restoreService;
         this.configuration = configuration;
     }
@@ -81,64 +87,113 @@ public class ModificationService implements Listener {
             return;
         }
         BlockState block = event.getBlock().getState();
-        Optional<String> presetName = getFlagValue(block);
+        List<Pair<Preset, ResourceType>> presets = getFlagPresets(block);
 
-        if (presetName.isEmpty()) return;
+        for (Pair<Preset, ResourceType> pair : presets) {
+            Preset preset = pair.first;
+            ResourceType type = pair.second;
+            if (!preset.contains(block.getBlockData())) {
+                event.setCancelled(true);
+                continue;
+            }
+            if (event.isCancelled()) {
+                event.setCancelled(true);
+            }
 
-        Optional<Preset> preset = configuration.main().presets().getPreset(presetName.get());
+            switch (type) {
+                case GROWING -> handleGrowingBlockDestruction(event, block, preset);
+                case FRAGMENT -> handleFragmentDestruction(event, block, preset);
+                case NODE -> handleBlockDestruction(block, preset, type);
+            }
+            break;
+        }
+    }
 
-        if (preset.isEmpty()) {
-            plugin.getLogger().warning("No preset found for " + presetName.get() + " used in region " + getRegionsAtBlock(block));
+    private void handleFragmentDestruction(BlockBreakEvent event, BlockState block, Preset preset) {
+        Optional<BlockData> replacement = preset.replacement(block);
+        if (replacement.isEmpty()) {
+            worlds.getWorld(block.getWorld().getUID()).breakBlock(ResourceType.FRAGMENT, preset, block);
             return;
         }
 
-        Set<Material> materials = preset.get().combinedMaterials();
+        Player player = event.getPlayer();
+        Vector direction = player.getEyeLocation().getDirection();
+        Location subtract = block.getLocation().subtract(direction);
+        for (ItemStack drop : block.getDrops(player.getActiveItem())) {
+            block.getWorld().dropItemNaturally(subtract, drop);
+        }
 
-        if (!materials.contains(block.getType())) {
+        block.setBlockData(replacement.get());
+    }
+
+    private void handleGrowingBlockDestruction(BlockBreakEvent event, BlockState block, Preset preset) {
+        if (!(block instanceof Ageable ageable)) {
+            return;
+        }
+        if (ageable.getAge() < ageable.getMaximumAge()) {
             event.setCancelled(true);
             return;
         }
 
-        handleBlockDestruction(block, preset.get());
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            worlds.getWorld(block.getWorld().getUID()).breakBlock(ResourceType.GROWING, preset, block);
+        });
+
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            ageable.setAge(0);
+            block.getBlock().setBlockData(ageable);
+        }, 1);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onGrowth(BlockGrowEvent event) {
+        getFlagPresets(event.getBlock().getState())
+                .stream()
+                .filter(p -> p.second == ResourceType.GROWING)
+                .filter(p -> p.first.contains(event.getBlock().getBlockData()))
+                .findFirst()
+                .ifPresent(p -> event.setCancelled(true));
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockPlace(BlockPlaceEvent event) {
         if (buildAllowed.contains(event.getPlayer().getUniqueId())) return;
-        Optional<String> flagValue = getFlagValue(event.getBlock().getState());
-        if (flagValue.isPresent()) {
+        List<Pair<Preset, ResourceType>> flagValue = getFlagPresets(event.getBlock().getState());
+        if (!flagValue.isEmpty()) {
             event.setCancelled(true);
-            return;
         }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onLeaveDecay(LeavesDecayEvent event) {
         BlockState block = event.getBlock().getState();
-        Optional<String> presetName = getFlagValue(block);
-        if (presetName.isEmpty()) return;
-
         if (restoreService.isRestored(block)) {
             event.setCancelled(true);
             return;
         }
-        World world = worlds.getWorld(block.getWorld().getUID());
 
-        Optional<Node> optNode = world.getNode(block.getLocation());
-        if (optNode.isPresent()) {
-            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-                optNode.get().breakBlock(block);
-            });
-            return;
+        List<Pair<Preset, ResourceType>> presetName = getFlagPresets(block);
+
+        World world = this.worlds.getWorld(block.getWorld().getUID());
+        for (Pair<Preset, ResourceType> pair : presetName) {
+            Preset preset = pair.first;
+            ResourceType type = pair.second;
+
+            Optional<Node> optNode = world.getNode(block.getLocation());
+            if (optNode.isPresent()) {
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    optNode.get().breakBlock(block, preset);
+                });
+                return;
+            }
+
+            if (preset.contains(block.getBlockData())) {
+                handleBlockDestruction(block, preset, type);
+                break;
+            }
         }
 
-        Optional<Preset> preset = configuration.main().presets().getPreset(presetName.get());
-        if (preset.isEmpty()) {
-            plugin.getLogger().warning("No preset found for " + presetName.get() + " used in region " + getRegionsAtBlock(block));
-            return;
-        }
 
-        handleBlockDestruction(block, preset.get());
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -155,13 +210,13 @@ public class ModificationService implements Listener {
      * @param block  block that was destroyed
      * @param preset preset to use for node creation
      */
-    private void handleBlockDestruction(BlockState block, Preset preset) {
+    private void handleBlockDestruction(BlockState block, Preset preset, ResourceType type) {
         // TODO: ugly af, maybe rework with some non existing threading framework
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            World world = worlds.getWorld(block.getWorld().getUID());
+            World world = this.worlds.getWorld(block.getWorld().getUID());
             Optional<Node> optNode = world.getNode(block.getLocation());
             if (optNode.isPresent()) {
-                optNode.get().breakBlock(block);
+                optNode.get().breakBlock(block, preset);
                 return;
             }
 
@@ -171,8 +226,8 @@ public class ModificationService implements Listener {
                 List<BlockState> blocks = floodFill(block, preset);
 
                 plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-                    node.addBlocks(blocks, preset);
-                    node.breakBlock(block);
+                    node.addBlocks(blocks, preset, type);
+                    node.breakBlock(block, preset);
                 });
             });
         });
@@ -201,17 +256,29 @@ public class ModificationService implements Listener {
      * @param block the block for which the flag value is being queried
      * @return an Optional containing the flag value if defined, otherwise an empty Optional
      */
-    private Optional<String> getFlagValue(BlockState block) {
+    private List<Pair<Preset, ResourceType>> getFlagPresets(BlockState block) {
+        List<Pair<Preset, ResourceType>> result = new ArrayList<>();
         ApplicableRegionSet regionSet = getRegionsAtBlock(block);
-        String queryValue = regionSet.queryValue(null, flag);
-        if (queryValue == null) {
-            plugin.getLogger().config("Found flag value: " + regionSet);
+        for (ResourceFlag resourceFlag : resourceFlags) {
+            String queryValue = regionSet.queryValue(null, resourceFlag);
+            if (queryValue != null) {
+                plugin.getLogger().config("Found flag value: " + regionSet);
+                configuration.secondary(Presets.KEY).getPreset(queryValue, resourceFlag.type())
+                             .ifPresentOrElse(
+                                     preset -> result.add(new Pair<>(preset, resourceFlag.type())),
+                                     () -> plugin.getLogger().warning("No preset found for " + queryValue + " used in region " + regionSet.getRegions()));
+                continue;
+            }
+            if (regionSet.getRegions().isEmpty()) {
+                Optional<String> optPreset = configuration.main().worlds().presetFor(block.getWorld(), resourceFlag.type());
+                if (optPreset.isEmpty()) continue;
+                optPreset.flatMap(preset -> configuration.secondary(Presets.KEY).getPreset(preset, resourceFlag.type()))
+                         .ifPresentOrElse(
+                                 preset -> result.add(new Pair<>(preset, resourceFlag.type())),
+                                 () -> plugin.getLogger().warning("No default preset found for type " + resourceFlag.type() + " in world " + block.getWorld().getName()));
+            }
         }
-        Optional<String> value = Optional.ofNullable(queryValue);
-        if (regionSet.getRegions().isEmpty()) {
-            return value.or(() -> configuration.main().worlds().presetFor(block.getWorld()));
-        }
-        return value;
+        return result;
     }
 
     /**
@@ -246,11 +313,11 @@ public class ModificationService implements Listener {
                         Location loc = curBlock.block().getLocation().clone().add(new Vector(x, y, z));
                         if (visited.contains(loc.toVector().toBlockVector())) continue;
                         BlockState nextBlock = loc.getBlock().getState();
-                        if (preset.contains(nextBlock.getType())) {
+                        if (preset.contains(nextBlock.getBlockData())) {
                             visited.add(nextBlock.getLocation().toVector().toBlockVector());
-                            Optional<String> flagValue = getFlagValue(nextBlock);
-                            if (flagValue.isEmpty()) continue;
-                            if (flagValue.get().equals(preset.name())) {
+                            var nodeFlag = getFlagPresets(nextBlock).stream().filter(p -> p.second == ResourceType.NODE).findFirst();
+                            if (nodeFlag.isEmpty()) continue;
+                            if (nodeFlag.get().first.name().equals(preset.name())) {
                                 queue.add(new Distance(nextBlock, curBlock.distance() + 1));
                             }
                         }
