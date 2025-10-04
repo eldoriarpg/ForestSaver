@@ -8,10 +8,12 @@ import java.util.UUID;
 
 public class Worlds {
     private final Nodes nodes;
+    private final Fragments fragments;
     public Map<UUID, World> worlds = new HashMap<>();
 
-    public Worlds(Nodes nodes) {
+    public Worlds(Nodes nodes, Fragments fragments) {
         this.nodes = nodes;
+        this.fragments = fragments;
     }
 
     /**
@@ -21,6 +23,6 @@ public class Worlds {
      * @return world with the given UUID
      */
     public World getWorld(UUID uuid) {
-        return worlds.computeIfAbsent(uuid, (k) -> new World(nodes, uuid));
+        return worlds.computeIfAbsent(uuid, (k) -> new World(nodes,fragments, uuid));
     }
 }

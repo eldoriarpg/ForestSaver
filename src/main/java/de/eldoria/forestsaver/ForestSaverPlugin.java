@@ -22,6 +22,7 @@ import de.eldoria.forestsaver.configuration.elements.Database;
 import de.eldoria.forestsaver.configuration.elements.Presets;
 import de.eldoria.forestsaver.configuration.elements.ResourceType;
 import de.eldoria.forestsaver.configuration.parsing.module.InternalModule;
+import de.eldoria.forestsaver.data.Fragments;
 import de.eldoria.forestsaver.data.Nodes;
 import de.eldoria.forestsaver.data.Worlds;
 import de.eldoria.forestsaver.data.dao.NodeFragment;
@@ -87,8 +88,9 @@ public class ForestSaverPlugin extends EldoPlugin {
                                                 .buildOnEnable(this);
 
         Nodes nodes = new Nodes(conf);
-        Worlds worlds = new Worlds(nodes);
-        RestoreService restoreService = new RestoreService(this, nodes, conf);
+        Fragments fragments = new Fragments();
+        Worlds worlds = new Worlds(nodes, fragments);
+        RestoreService restoreService = new RestoreService(this, nodes, worlds, conf);
         ModificationService modificationService = new ModificationService(this, worlds, WorldGuard.getInstance(), List.of(nodeFlag, growingFlag, fragmentFlag), restoreService, conf);
         registerListener(modificationService);
 
