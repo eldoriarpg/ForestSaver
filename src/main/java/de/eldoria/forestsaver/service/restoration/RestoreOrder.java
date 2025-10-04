@@ -34,6 +34,7 @@ public enum RestoreOrder {
 
     /**
      * Sorts the given collection according to this restore order.
+     *
      * @param collection collection to sort
      */
     public void sort(List<Fragment> collection) {

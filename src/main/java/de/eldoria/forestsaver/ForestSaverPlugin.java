@@ -1,5 +1,6 @@
 package de.eldoria.forestsaver;
 
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.flags.registry.FlagRegistry;
 import de.chojo.sadu.datasource.DataSourceCreator;
@@ -15,16 +16,18 @@ import de.eldoria.eldoutilities.plugin.EldoPlugin;
 import de.eldoria.forestsaver.commands.Debug;
 import de.eldoria.forestsaver.commands.Node;
 import de.eldoria.forestsaver.commands.Settings;
-import de.eldoria.forestsaver.commands.suggestions.Presets;
+import de.eldoria.forestsaver.commands.suggestions.PresetSuggestions;
 import de.eldoria.forestsaver.configuration.Configuration;
 import de.eldoria.forestsaver.configuration.elements.Database;
+import de.eldoria.forestsaver.configuration.elements.Presets;
+import de.eldoria.forestsaver.configuration.elements.ResourceType;
 import de.eldoria.forestsaver.configuration.parsing.module.InternalModule;
 import de.eldoria.forestsaver.data.Nodes;
 import de.eldoria.forestsaver.data.Worlds;
-import de.eldoria.forestsaver.data.dao.Fragment;
+import de.eldoria.forestsaver.data.dao.NodeFragment;
 import de.eldoria.forestsaver.service.modification.ModificationService;
 import de.eldoria.forestsaver.service.restoration.RestoreService;
-import de.eldoria.forestsaver.worldguard.ForestFlag;
+import de.eldoria.forestsaver.worldguard.ResourceFlag;
 import de.eldoria.jacksonbukkit.JacksonPaper;
 import de.eldoria.jacksonbukkit.serializer.NamespacedKeySerializer;
 import dev.chojo.ocular.Configurations;
@@ -39,10 +42,13 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.logging.Level;
 
 public class ForestSaverPlugin extends EldoPlugin {
-    private ForestFlag forestFlag;
+    private ResourceFlag nodeFlag;
+    private ResourceFlag growingFlag;
+    private ResourceFlag fragmentFlag;
     private Configurations<Configuration> conf;
 
     @Override
@@ -61,12 +67,16 @@ public class ForestSaverPlugin extends EldoPlugin {
                                                     .withNamespacedKeyFormat(NamespacedKeySerializer.Format.SHORT)
                                                     .build())
                              .addModule(new InternalModule())
+                             .addModule(new Jdk8Module())
                              .build();
+        conf.secondary(Presets.KEY);
         conf.main();
         conf.save();
         FlagRegistry flagRegistry = WorldGuard.getInstance().getFlagRegistry();
-        forestFlag = new ForestFlag(conf);
-        flagRegistry.register(forestFlag);
+        nodeFlag = new ResourceFlag("node-resource", ResourceType.NODE, conf);
+        growingFlag = new ResourceFlag("growing-resource", ResourceType.GROWING, conf);
+        fragmentFlag = new ResourceFlag("fragment-resource", ResourceType.FRAGMENT, conf);
+        flagRegistry.register(nodeFlag);
 
     }
 
@@ -79,7 +89,7 @@ public class ForestSaverPlugin extends EldoPlugin {
         Nodes nodes = new Nodes(conf);
         Worlds worlds = new Worlds(nodes);
         RestoreService restoreService = new RestoreService(this, nodes, conf);
-        ModificationService modificationService = new ModificationService(this, worlds, WorldGuard.getInstance(), forestFlag, restoreService, conf);
+        ModificationService modificationService = new ModificationService(this, worlds, WorldGuard.getInstance(), List.of(nodeFlag, growingFlag, fragmentFlag), restoreService, conf);
         registerListener(modificationService);
 
         // Parser without a CommandMeta mapper.
@@ -87,7 +97,7 @@ public class ForestSaverPlugin extends EldoPlugin {
         Node node = new Node(nodes, restoreService, modificationService);
         annotationParser.parse(node);
         annotationParser.parse(new Debug());
-        annotationParser.parse(new Presets(conf));
+        annotationParser.parse(new PresetSuggestions(conf));
         annotationParser.parse(new Settings(conf));
         setupDb();
     }
@@ -147,7 +157,7 @@ public class ForestSaverPlugin extends EldoPlugin {
 
         RowMapperRegistry rowMapperRegistry = new RowMapperRegistry();
         rowMapperRegistry.register(de.eldoria.forestsaver.data.dao.Node.class);
-        rowMapperRegistry.register(Fragment.class);
+        rowMapperRegistry.register(NodeFragment.class);
         QueryConfiguration.setDefault(QueryConfiguration.builder(dataSource)
                                                         .setRowMapperRegistry(rowMapperRegistry)
                                                         .build());

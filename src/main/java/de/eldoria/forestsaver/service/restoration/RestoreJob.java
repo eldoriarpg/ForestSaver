@@ -1,6 +1,7 @@
 package de.eldoria.forestsaver.service.restoration;
 
 import de.eldoria.forestsaver.data.dao.Fragment;
+import de.eldoria.forestsaver.data.dao.NodeFragment;
 import de.eldoria.forestsaver.data.dao.Node;
 import org.bukkit.World;
 import org.bukkit.block.data.BlockData;

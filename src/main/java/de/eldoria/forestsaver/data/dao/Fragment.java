@@ -1,8 +1,6 @@
 package de.eldoria.forestsaver.data.dao;
 
-import de.chojo.sadu.mapper.annotation.MappingProvider;
-import de.chojo.sadu.mapper.rowmapper.RowMapping;
-import de.chojo.sadu.queries.converter.StandardValueConverter;
+import de.eldoria.forestsaver.configuration.elements.ResourceType;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.block.data.BlockData;
@@ -16,19 +14,24 @@ import static de.chojo.sadu.queries.api.call.Call.call;
 import static de.chojo.sadu.queries.api.query.Query.query;
 import static de.chojo.sadu.queries.converter.StandardValueConverter.UUID_STRING;
 
-public record Fragment(long nodeId, UUID world, BlockVector position, String data, boolean alwaysRestorable,
-                       Instant destroyed) {
+public class Fragment {
+    protected final ResourceType type;
+    protected final UUID world;
+    protected final BlockVector position;
+    protected final String data;
+    protected final boolean alwaysRestorable;
+    protected final Instant destroyed;
+    protected final int token;
 
-    @MappingProvider({"node_id", "world", "x", "y", "z", "block_data", "always_restore", "destroyed"})
-    public static RowMapping<Fragment> map() {
-        return row -> new Fragment(row.getLong("node_id"),
-                row.get("world", UUID_STRING),
-                new BlockVector(row.getInt("x"),
-                        row.getInt("y"),
-                        row.getInt("z")),
-                row.getString("block_data"),
-                row.getBoolean("always_restore"),
-                row.get("destroyed", StandardValueConverter.INSTANT_TIMESTAMP));
+
+    public Fragment(ResourceType type, UUID world, BlockVector position, String data, boolean alwaysRestorable, Instant destroyed, int token) {
+        this.type = type;
+        this.world = world;
+        this.position = position;
+        this.data = data;
+        this.alwaysRestorable = alwaysRestorable;
+        this.destroyed = destroyed;
+        this.token = token;
     }
 
     /**
@@ -40,9 +43,8 @@ public record Fragment(long nodeId, UUID world, BlockVector position, String dat
         // TODO: logging
         // TODO: Maybe sync back to main thread?
         CompletableFuture.runAsync(() -> query("""
-                UPDATE fragments SET destroyed = NULL WHERE node_id = :id AND x = :x AND y = :y AND z = :z;
-                UPDATE nodes SET last_modified = now() WHERE id = :id;""")
-                .single(call().bind("id", nodeId).bind("x", position.getBlockX()).bind("y", position.getBlockY()).bind("z", position.getBlockZ()))
+                UPDATE fragments SET destroyed = NULL, token = NULL WHERE world = :world::UUID AND x = :x AND y = :y AND z = :z;""")
+                .single(call().bind("world", this.world, UUID_STRING).bind("x", position.getBlockX()).bind("y", position.getBlockY()).bind("z", position.getBlockZ()))
                 .update());
         world.setBlockData(position.toLocation(world), blockData());
     }
@@ -54,5 +56,33 @@ public record Fragment(long nodeId, UUID world, BlockVector position, String dat
      */
     public BlockData blockData() {
         return Bukkit.createBlockData(data);
+    }
+
+    public ResourceType type() {
+        return type;
+    }
+
+    public UUID world() {
+        return world;
+    }
+
+    public BlockVector position() {
+        return position;
+    }
+
+    public String data() {
+        return data;
+    }
+
+    public boolean alwaysRestorable() {
+        return alwaysRestorable;
+    }
+
+    public Instant destroyed() {
+        return destroyed;
+    }
+
+    public int token() {
+        return token;
     }
 }
